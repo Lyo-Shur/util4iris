@@ -1,9 +1,9 @@
 package api
 
 import (
-	"github.com/Lyo-Shur/gutils"
-	"github.com/Lyo-Shur/mysqlutils"
 	"github.com/kataras/iris"
+	"github.com/lyoshur/gutils"
+	"github.com/lyoshur/mysqlutils"
 	"log"
 	"strconv"
 	"strings"

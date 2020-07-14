@@ -1,10 +1,10 @@
 package util4iris
 
 import (
-	"github.com/Lyo-Shur/util4iris/api"
-	"github.com/Lyo-Shur/util4iris/controller"
-	"github.com/Lyo-Shur/util4iris/form"
 	"github.com/kataras/iris"
+	"github.com/lyoshur/util4iris/api"
+	"github.com/lyoshur/util4iris/controller"
+	"github.com/lyoshur/util4iris/form"
 )
 
 // api 返回状态码以及数据
