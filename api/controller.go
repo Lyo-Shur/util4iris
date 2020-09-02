@@ -29,17 +29,17 @@ type SimpleApi struct{}
 // operation 操作命令
 // ctx IRIS上下文
 // dbHelpers 多数据库查询集合(使用IRIS注入)
-func (simpleApi *SimpleApi) PostBy(tableName string, operation string, ctx iris.Context, holder *mysqlutils.Holder) string {
+func (simpleApi *SimpleApi) PostBy(tableName string, operation string, ctx iris.Context, factory mysqlutils.SessionFactory) string {
 	// 分发请求
 	unknown := "unknown"
-	if !holder.DataBase.TableExist(tableName) {
-		simpleApi.operationFactory(unknown)(holder, tableName, ctx)
+	if !factory.DataBase.TableExist(tableName) {
+		simpleApi.operationFactory(unknown)(factory, tableName, ctx)
 	}
-	return simpleApi.operationFactory(operation)(holder, tableName, ctx)
+	return simpleApi.operationFactory(operation)(factory, tableName, ctx)
 }
 
 // 操作分发工厂
-func (simpleApi *SimpleApi) operationFactory(operation string) func(holder *mysqlutils.Holder, tableName string, ctx iris.Context) string {
+func (simpleApi *SimpleApi) operationFactory(operation string) func(factory mysqlutils.SessionFactory, tableName string, ctx iris.Context) string {
 	switch operation {
 	case "list":
 		return simpleApi.list
@@ -56,9 +56,9 @@ func (simpleApi *SimpleApi) operationFactory(operation string) func(holder *mysq
 	}
 }
 
-func (simpleApi *SimpleApi) list(holder *mysqlutils.Holder, tableName string, ctx iris.Context) string {
+func (simpleApi *SimpleApi) list(factory mysqlutils.SessionFactory, tableName string, ctx iris.Context) string {
 	// 解析参数
-	values, err := simpleApi.Values(holder, tableName, ctx)
+	values, err := simpleApi.Values(factory, tableName, ctx)
 	if err != nil {
 		log.Println(err)
 		return (&gutils.CodeModeDTO{
@@ -68,7 +68,7 @@ func (simpleApi *SimpleApi) list(holder *mysqlutils.Holder, tableName string, ct
 		}).ToJson()
 	}
 	// 执行查询
-	table, err := holder.Services[tableName].GetList(values)
+	table, err := factory.Services[tableName].GetList(values)
 	if err != nil {
 		log.Println(err)
 		return (&gutils.CodeModeDTO{
@@ -77,7 +77,7 @@ func (simpleApi *SimpleApi) list(holder *mysqlutils.Holder, tableName string, ct
 			Data:    NullData,
 		}).ToJson()
 	}
-	count, err := holder.Services[tableName].GetCount(values)
+	count, err := factory.Services[tableName].GetCount(values)
 	if err != nil {
 		log.Println(err)
 		return (&gutils.CodeModeDTO{
@@ -88,11 +88,11 @@ func (simpleApi *SimpleApi) list(holder *mysqlutils.Holder, tableName string, ct
 	}
 	// 组合外键
 	tableMap := table.ToMap()
-	keys := holder.DataBase.GetTable(tableName).Keys
+	keys := factory.DataBase.GetTable(tableName).Keys
 	for i := 0; i < len(tableMap); i++ {
 		for j := 0; j < len(keys); j++ {
 			query := tableMap[i][gutils.ToBigHump(keys[j].ColumnName)]
-			table, err := holder.Services[keys[j].RelyTable].GetModel(query)
+			table, err := factory.Services[keys[j].RelyTable].GetModel(query)
 			if err != nil {
 				log.Println(err)
 				return (&gutils.CodeModeDTO{
@@ -117,9 +117,9 @@ func (simpleApi *SimpleApi) list(holder *mysqlutils.Holder, tableName string, ct
 	}).ToJson()
 }
 
-func (simpleApi *SimpleApi) model(holder *mysqlutils.Holder, tableName string, ctx iris.Context) string {
+func (simpleApi *SimpleApi) model(factory mysqlutils.SessionFactory, tableName string, ctx iris.Context) string {
 	// 解析参数
-	values, err := simpleApi.Values(holder, tableName, ctx)
+	values, err := simpleApi.Values(factory, tableName, ctx)
 	if err != nil {
 		log.Println(err)
 		return (&gutils.CodeModeDTO{
@@ -130,7 +130,7 @@ func (simpleApi *SimpleApi) model(holder *mysqlutils.Holder, tableName string, c
 	}
 	// 根据索引确定主键
 	key := ""
-	indexs := holder.DataBase.GetTable(tableName).Indexs
+	indexs := factory.DataBase.GetTable(tableName).Indexs
 	for i := 0; i < len(indexs); i++ {
 		index := indexs[i]
 		if index.Name == "PRIMARY" {
@@ -147,7 +147,7 @@ func (simpleApi *SimpleApi) model(holder *mysqlutils.Holder, tableName string, c
 		}).ToJson()
 	}
 	// 执行查询
-	table, err := holder.Services[tableName].GetModel(v)
+	table, err := factory.Services[tableName].GetModel(v)
 	if err != nil {
 		log.Println(err)
 		return (&gutils.CodeModeDTO{
@@ -167,10 +167,10 @@ func (simpleApi *SimpleApi) model(holder *mysqlutils.Holder, tableName string, c
 	}
 	data := m[0]
 	// 组合外键
-	keys := holder.DataBase.GetTable(tableName).Keys
+	keys := factory.DataBase.GetTable(tableName).Keys
 	for i := 0; i < len(keys); i++ {
 		query := data[gutils.ToBigHump(keys[i].ColumnName)]
-		table, err := holder.Services[gutils.ToSmallHump(keys[i].RelyTable)].GetModel(query)
+		table, err := factory.Services[gutils.ToSmallHump(keys[i].RelyTable)].GetModel(query)
 		if err != nil {
 			log.Println(err)
 			return (&gutils.CodeModeDTO{
@@ -191,9 +191,9 @@ func (simpleApi *SimpleApi) model(holder *mysqlutils.Holder, tableName string, c
 	}).ToJson()
 }
 
-func (simpleApi *SimpleApi) insert(holder *mysqlutils.Holder, tableName string, ctx iris.Context) string {
+func (simpleApi *SimpleApi) insert(factory mysqlutils.SessionFactory, tableName string, ctx iris.Context) string {
 	// 解析参数
-	values, err := simpleApi.Values(holder, tableName, ctx)
+	values, err := simpleApi.Values(factory, tableName, ctx)
 	if err != nil {
 		log.Println(err)
 		return (&gutils.CodeModeDTO{
@@ -203,7 +203,7 @@ func (simpleApi *SimpleApi) insert(holder *mysqlutils.Holder, tableName string, 
 		}).ToJson()
 	}
 	// 类型推断格式校验
-	table := holder.DataBase.GetTable(tableName)
+	table := factory.DataBase.GetTable(tableName)
 	for i := 0; i < len(table.Columns); i++ {
 		// 栏位信息
 		column := table.Columns[i]
@@ -241,7 +241,7 @@ func (simpleApi *SimpleApi) insert(holder *mysqlutils.Holder, tableName string, 
 		}
 	}
 	// 数据插入
-	key, err := holder.Services[tableName].Insert(values)
+	key, err := factory.Services[tableName].Insert(values)
 	if err != nil {
 		log.Println(err)
 		return (&gutils.CodeModeDTO{
@@ -257,9 +257,9 @@ func (simpleApi *SimpleApi) insert(holder *mysqlutils.Holder, tableName string, 
 	}).ToJson()
 }
 
-func (simpleApi *SimpleApi) update(holder *mysqlutils.Holder, tableName string, ctx iris.Context) string {
+func (simpleApi *SimpleApi) update(factory mysqlutils.SessionFactory, tableName string, ctx iris.Context) string {
 	// 解析参数
-	values, err := simpleApi.Values(holder, tableName, ctx)
+	values, err := simpleApi.Values(factory, tableName, ctx)
 	if err != nil {
 		log.Println(err)
 		return (&gutils.CodeModeDTO{
@@ -269,7 +269,7 @@ func (simpleApi *SimpleApi) update(holder *mysqlutils.Holder, tableName string, 
 		}).ToJson()
 	}
 	// 数据更新
-	key, err := holder.Services[tableName].Update(values)
+	key, err := factory.Services[tableName].Update(values)
 	if err != nil {
 		log.Println(err)
 		return (&gutils.CodeModeDTO{
@@ -285,9 +285,9 @@ func (simpleApi *SimpleApi) update(holder *mysqlutils.Holder, tableName string, 
 	}).ToJson()
 }
 
-func (simpleApi *SimpleApi) delete(holder *mysqlutils.Holder, tableName string, ctx iris.Context) string {
+func (simpleApi *SimpleApi) delete(factory mysqlutils.SessionFactory, tableName string, ctx iris.Context) string {
 	// 解析参数
-	values, err := simpleApi.Values(holder, tableName, ctx)
+	values, err := simpleApi.Values(factory, tableName, ctx)
 	if err != nil {
 		log.Println(err)
 		return (&gutils.CodeModeDTO{
@@ -298,7 +298,7 @@ func (simpleApi *SimpleApi) delete(holder *mysqlutils.Holder, tableName string, 
 	}
 	// 根据索引确定主键
 	key := ""
-	indexs := holder.DataBase.GetTable(tableName).Indexs
+	indexs := factory.DataBase.GetTable(tableName).Indexs
 	for i := 0; i < len(indexs); i++ {
 		index := indexs[i]
 		if index.Name == "PRIMARY" {
@@ -315,7 +315,7 @@ func (simpleApi *SimpleApi) delete(holder *mysqlutils.Holder, tableName string, 
 		}).ToJson()
 	}
 	// 执行查询
-	count, err := holder.Services[tableName].Delete(v)
+	count, err := factory.Services[tableName].Delete(v)
 	if err != nil {
 		log.Println(err)
 		return (&gutils.CodeModeDTO{
@@ -332,17 +332,17 @@ func (simpleApi *SimpleApi) delete(holder *mysqlutils.Holder, tableName string, 
 }
 
 // unknown操作
-func (simpleApi *SimpleApi) unknown(holder *mysqlutils.Holder, tableName string, ctx iris.Context) string {
+func (simpleApi *SimpleApi) unknown(factory mysqlutils.SessionFactory, tableName string, ctx iris.Context) string {
 	return "unknown request path"
 }
 
 // ========================================= 参数处理层 ========================================= //
 
 // 读取数据
-func (simpleApi *SimpleApi) Values(holder *mysqlutils.Holder, tableName string, ctx iris.Context) (map[string]interface{}, error) {
+func (simpleApi *SimpleApi) Values(factory mysqlutils.SessionFactory, tableName string, ctx iris.Context) (map[string]interface{}, error) {
 	m := make(map[string]string)
 	// 读取表单中的数据
-	formMap, err := simpleApi.formValues(holder, tableName, ctx)
+	formMap, err := simpleApi.formValues(factory, tableName, ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -350,7 +350,7 @@ func (simpleApi *SimpleApi) Values(holder *mysqlutils.Holder, tableName string, 
 		m[gutils.ToBigHump(k)] = v
 	}
 	// 读取JSON中的数据
-	jsonMap, err := simpleApi.jsonValues(holder, tableName, ctx)
+	jsonMap, err := simpleApi.jsonValues(factory, tableName, ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -358,7 +358,7 @@ func (simpleApi *SimpleApi) Values(holder *mysqlutils.Holder, tableName string, 
 		m[gutils.ToBigHump(k)] = v
 	}
 	// 清洗数据
-	attr, err := simpleApi.clear(holder, tableName, m)
+	attr, err := simpleApi.clear(factory, tableName, m)
 	if err != nil {
 		return nil, err
 	}
@@ -366,7 +366,7 @@ func (simpleApi *SimpleApi) Values(holder *mysqlutils.Holder, tableName string, 
 }
 
 // 读取表单数据
-func (simpleApi *SimpleApi) formValues(holder *mysqlutils.Holder, tableName string, ctx iris.Context) (map[string]string, error) {
+func (simpleApi *SimpleApi) formValues(factory mysqlutils.SessionFactory, tableName string, ctx iris.Context) (map[string]string, error) {
 	values := make(map[string]string)
 	for k, v := range ctx.FormValues() {
 		values[k] = v[0]
@@ -375,7 +375,7 @@ func (simpleApi *SimpleApi) formValues(holder *mysqlutils.Holder, tableName stri
 }
 
 // 读取JSON数据
-func (simpleApi *SimpleApi) jsonValues(holder *mysqlutils.Holder, tableName string, ctx iris.Context) (map[string]string, error) {
+func (simpleApi *SimpleApi) jsonValues(factory mysqlutils.SessionFactory, tableName string, ctx iris.Context) (map[string]string, error) {
 	values := make(map[string]string)
 	if ctx.GetHeader("Content-Type") != "application/json" {
 		return values, nil
@@ -385,13 +385,13 @@ func (simpleApi *SimpleApi) jsonValues(holder *mysqlutils.Holder, tableName stri
 }
 
 // 清洗数据
-func (simpleApi *SimpleApi) clear(holder *mysqlutils.Holder, tableName string, m map[string]string) (map[string]interface{}, error) {
+func (simpleApi *SimpleApi) clear(factory mysqlutils.SessionFactory, tableName string, m map[string]string) (map[string]interface{}, error) {
 	// 清洗数据
 	// 规则是遍历表结构信息
 	// 并按表列类型初始化attrMap或者转化m中的值
 	attrMap := make(map[string]interface{})
 	// 获取并遍历表结构信息
-	table := holder.DataBase.GetTable(tableName)
+	table := factory.DataBase.GetTable(tableName)
 	for i := 0; i < len(table.Columns); i++ {
 		// 栏位信息
 		column := table.Columns[i]
